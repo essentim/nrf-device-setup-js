@@ -40,7 +40,6 @@ import MemoryMap from 'nrf-intel-hex';
 import { DfuUpdates, DfuTransportUsbSerial, DfuOperation } from 'pc-nrf-dfu-js';
 import * as initPacket from './util/initPacket';
 import * as dfuTrigger from './dfuTrigger';
-import * as jprogFunc from './jprogFunc';
 
 /**
  * @const {number} DEFAULT_DEVICE_WAIT_TIME Default wait time for UART port to
@@ -62,14 +61,6 @@ const {
     InitPacket, FwType, HashType, createInitPacketUint8Array,
 } = initPacket;
 
-const {
-    openJLink,
-    closeJLink,
-    verifySerialPortAvailable,
-    getDeviceFamily,
-    validateFirmware,
-    programFirmware,
-} = jprogFunc;
 
 const debug = Debug('device-setup');
 const debugError = Debug('device-setup:error');
@@ -550,45 +541,6 @@ export function setupDevice(selectedDevice, options) {
             }
             debug('Device is not in DFU-Bootloader and has no DFU trigger interface');
         }
-    }
-
-
-    if (jprog && selectedDevice.traits.includes('jlink')) {
-        let firmwareFamily;
-        let wasProgrammed = false;
-        return Promise.resolve()
-            .then(() => needSerialport && verifySerialPortAvailable(selectedDevice))
-            .then(() => openJLink(selectedDevice))
-            .then(() => getDeviceFamily(selectedDevice))
-            .then(family => {
-                firmwareFamily = jprog[family];
-                if (!firmwareFamily) {
-                    throw new Error(`No firmware defined for ${family} family`);
-                }
-            })
-            .then(() => validateFirmware(selectedDevice, firmwareFamily))
-            .then(valid => {
-                if (valid) {
-                    debug('Application firmware id matches');
-                    return selectedDevice;
-                }
-                return confirmHelper(promiseConfirm)
-                    .then(isConfirmed => {
-                        if (!isConfirmed) {
-                            // go on without update
-                            return selectedDevice;
-                        }
-                        return programFirmware(selectedDevice, firmwareFamily)
-                            .then(() => {
-                                wasProgrammed = true;
-                            });
-                    });
-            })
-            .then(
-                () => closeJLink(selectedDevice).then(() => selectedDevice),
-                err => closeJLink(selectedDevice).then(() => Promise.reject(err))
-            )
-            .then(() => createReturnValue(selectedDevice, { wasProgrammed }, detailedOutput));
     }
 
     debug('Selected device cannot be prepared, maybe the app still can use it');
